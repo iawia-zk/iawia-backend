@@ -4,5 +4,5 @@
 /relayer/node_modules
 Dockerfile
 Dockerfile.tee
-*.sh
+scripts/
 *.http
