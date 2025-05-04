@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  db:
+    image: docker.io/library/postgres:14.17
+    restart: always
+    shm_size: '128mb'
+    container_name: postgres-instance
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: iawia
+    volumes:
+      - ./setup.sql:/docker-entrypoint-initdb.d/setup.sql
+    ports:
+      - '5432:5432'
