@@ -1,5 +1,6 @@
 pub mod file_generator;
 pub mod proof_generator;
+pub mod proof_verifier;
 pub mod witness_generator;
 
 use serde::Deserialize;

@@ -1,5 +1,5 @@
 use core::str;
-use std::{io::Write, path};
+use std::path;
 
 use crate::utils::get_tmp_folder_path;
 

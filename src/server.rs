@@ -1,4 +1,5 @@
 use aws_nitro_enclaves_nsm_api::api::ErrorCode;
+use getrandom;
 use jsonrpsee::core::async_trait;
 use jsonrpsee::proc_macros::rpc;
 use jsonrpsee::types;
@@ -10,7 +11,6 @@ use sqlx::Pool;
 use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
-use getrandom;
 
 use crate::db::create_proof_status;
 use crate::store::LruStore;
@@ -42,6 +42,7 @@ pub struct RpcServerImpl {
     file_generator_sender: tokio::sync::mpsc::Sender<FileGenerator>,
     circuit_zkey_map: Arc<HashMap<String, String>>,
     db: Pool<sqlx::Postgres>,
+    notification_receiver: tokio::sync::broadcast::Receiver<String>,
 }
 
 impl RpcServerImpl {
@@ -51,6 +52,7 @@ impl RpcServerImpl {
         file_generator_sender: tokio::sync::mpsc::Sender<FileGenerator>,
         circuit_zkey_map: Arc<HashMap<String, String>>,
         db: Pool<sqlx::Postgres>,
+        notification_receiver: tokio::sync::broadcast::Receiver<String>,
     ) -> Self {
         Self {
             fd,
@@ -58,6 +60,38 @@ impl RpcServerImpl {
             file_generator_sender,
             circuit_zkey_map,
             db,
+            notification_receiver,
+        }
+    }
+}
+
+async fn wait_for_notification(
+    uuid: uuid::Uuid,
+    receiver: &mut tokio::sync::broadcast::Receiver<String>,
+    pool: &sqlx::PgPool,
+) -> Result<(), sqlx::Error> {
+    loop {
+        let msg = receiver.recv().await.expect("Receiver error");
+        let payload: serde_json::Value = serde_json::from_str(&msg)
+            .unwrap_or(serde_json::Value::Null);
+        if let Some(id_str) = payload.get("request_id").and_then(|v| v.as_str()) {
+            if let Ok(id) = uuid::Uuid::parse_str(id_str) {
+                if id == uuid {
+                    if let Some(status_val) = payload.get("status").and_then(|v| v.as_i64()) {
+                        // For example: wait until the status is > Pending (assuming Pending==0)
+                        if status_val > 1 {
+                            // let record = sqlx::query_as::<_, ProofPayload>(r#"SELECT
+                            //     request_id, proof_type, status, created_at, circuit_name, onchain,
+                            //     witness_generated_at, proof_generated_at, proof, public_inputs, reason, identifier
+                            //     FROM proofs WHERE request_id = $1"#)
+                            //     .bind(uuid)
+                            //     .fetch_one(pool)
+                            //     .await?;
+                            return Ok(());
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -230,7 +264,7 @@ impl RpcServer for RpcServerImpl {
                         format!("Could not find the given circuit name: {}", &circuit_name),
                         None,
                     ));
-                }    
+                }
                 submit_request
             }
             Err(_) => {
@@ -274,7 +308,21 @@ impl RpcServer for RpcServerImpl {
         }
 
         self.store.remove_agreement(&uuid).await;
-        ResponsePayload::success(uuid.to_string())
+
+        let mut receiver = self.notification_receiver.resubscribe();
+        match wait_for_notification(uuid, &mut receiver, &self.db).await {
+            Ok(()) => (),
+            Err(e) => {
+                return ResponsePayload::error(ErrorObjectOwned::owned::<String>(
+                        types::ErrorCode::InternalError.code(), //INTERNAL_SERVER_ERROR
+                        format!("Failed to receive notification: {:?}", e),
+                        None,
+                    )
+                );
+            }
+        };
+
+        ResponsePayload::success("Proof request submitted successfully".to_string())
     }
 }
 
@@ -320,10 +368,12 @@ impl RngCore for NitroRng {
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         if self.fd == 0 {
             // In local mode, use the OS randomness.
-            getrandom::fill(dest).map_err(|_| rand_core::Error::new(io::Error::new(
-                io::ErrorKind::Other,
-                "Failed to get local random bytes",
-            )))?;
+            getrandom::fill(dest).map_err(|_| {
+                rand_core::Error::new(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Failed to get local random bytes",
+                ))
+            })?;
             Ok(())
         } else {
             unsafe {

@@ -4,8 +4,13 @@ The prover server allows a seamless interface to request proofs from a server. I
 
 ## Build
 
-build `rapidsnark` following their `README` first
-then use `Makefile` to build the prover backend
+```sh
+cd rapidsnark
+git submodule init
+git submodule update
+./build_gmp.sh host
+make host
+```
 
 ## Running the server
 

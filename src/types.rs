@@ -56,7 +56,9 @@ impl ProofRequest {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, sqlx::Type)]
+#[sqlx(type_name = "smallint")]
+#[repr(i16)]
 pub enum ProofType {
     Register,
     Dsc,

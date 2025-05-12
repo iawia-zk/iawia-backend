@@ -2,7 +2,7 @@ use std::path;
 
 use crate::utils::get_tmp_folder_path;
 
-use crate::types::{ProofRequest, ProofType};
+use crate::types::ProofRequest;
 use tokio::io::AsyncWriteExt;
 
 pub struct FileGenerator {
@@ -20,10 +20,6 @@ impl FileGenerator {
 
     pub fn uuid(&self) -> uuid::Uuid {
         self.uuid.clone()
-    }
-
-    pub fn proof_type(&self) -> ProofType {
-        (&self.proof_request).into()
     }
 
     //create the tmp folder

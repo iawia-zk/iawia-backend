@@ -5,19 +5,25 @@ use crate::utils::get_tmp_folder_path;
 
 pub struct ProofGenerator {
     uuid: uuid::Uuid,
+    circuit_name: String,
     zkey_file_path: String,
 }
 
 impl ProofGenerator {
-    pub fn new(uuid: uuid::Uuid, zkey_file_path: String) -> Self {
+    pub fn new(uuid: uuid::Uuid, circuit_name: String, zkey_file_path: String) -> Self {
         ProofGenerator {
             uuid,
+            circuit_name,
             zkey_file_path,
         }
     }
 
     pub fn uuid(&self) -> uuid::Uuid {
         self.uuid.clone()
+    }
+
+    pub fn circuit_name(&self) -> String {
+        self.circuit_name.clone()
     }
 
     pub async fn run(&self, rapid_snark_path_exe: &String) -> Result<(), String> {
@@ -29,10 +35,7 @@ impl ProofGenerator {
             return Err("Witness file does not exist".to_string());
         }
 
-        // let proof_file_path_str = get_tmp_folder_path(&self.uuid.to_string());
         let proof_file_path = path::Path::new(&tmp_folder_path).join("proof.json");
-
-        // let public_inputs = get_tmp_folder_path(&self.uuid);
         let public_inputs = path::Path::new(&tmp_folder_path).join("public_inputs.json");
 
         match tokio::process::Command::new(format!("./{}", rapid_snark_path_exe))
